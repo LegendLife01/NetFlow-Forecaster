@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.npy
+.venv/
+venv/
+
+ml/*.pth
+ml/*.png
+ml/metrics.json
+ml/spike_summary.json
+
+clab-*/
+runs/

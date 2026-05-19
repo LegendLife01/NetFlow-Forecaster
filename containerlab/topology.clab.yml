@@ -1,0 +1,65 @@
+name: ai-traffic-lab
+
+topology:
+  defaults:
+    kind: linux
+
+  kinds:
+    linux:
+      image: frrouting/frr:v8.4.0
+
+  nodes:
+    spine1:
+      group: spine
+      binds:
+        - ../configs/frr/spine1/daemons:/etc/frr/daemons
+        - ../configs/frr/spine1/frr.conf:/etc/frr/frr.conf
+
+    spine2:
+      group: spine
+      binds:
+        - ../configs/frr/spine2/daemons:/etc/frr/daemons
+        - ../configs/frr/spine2/frr.conf:/etc/frr/frr.conf
+
+    leaf1:
+      group: leaf
+      binds:
+        - ../configs/frr/leaf1/daemons:/etc/frr/daemons
+        - ../configs/frr/leaf1/frr.conf:/etc/frr/frr.conf
+
+    leaf2:
+      group: leaf
+      binds:
+        - ../configs/frr/leaf2/daemons:/etc/frr/daemons
+        - ../configs/frr/leaf2/frr.conf:/etc/frr/frr.conf
+
+    leaf3:
+      group: leaf
+      binds:
+        - ../configs/frr/leaf3/daemons:/etc/frr/daemons
+        - ../configs/frr/leaf3/frr.conf:/etc/frr/frr.conf
+
+    leaf4:
+      group: leaf
+      binds:
+        - ../configs/frr/leaf4/daemons:/etc/frr/daemons
+        - ../configs/frr/leaf4/frr.conf:/etc/frr/frr.conf
+
+    telemetry:
+      kind: linux
+      image: python:3.11-slim
+      group: server
+      binds:
+        - ../scripts:/scripts
+        - ../ml:/ml
+
+  links:
+    - endpoints: ["leaf1:eth1", "spine1:eth1"]
+    - endpoints: ["leaf1:eth2", "spine2:eth1"]
+    - endpoints: ["leaf2:eth1", "spine1:eth2"]
+    - endpoints: ["leaf2:eth2", "spine2:eth2"]
+    - endpoints: ["leaf3:eth1", "spine1:eth3"]
+    - endpoints: ["leaf3:eth2", "spine2:eth3"]
+    - endpoints: ["leaf4:eth1", "spine1:eth4"]
+    - endpoints: ["leaf4:eth2", "spine2:eth4"]
+    - endpoints: ["telemetry:eth1", "spine1:eth5"]
