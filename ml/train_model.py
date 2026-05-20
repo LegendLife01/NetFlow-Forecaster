@@ -41,6 +41,17 @@ class MultivariateTrafficLSTM(nn.Module):
         return self.head(out[:, -1, :])
 
 
+class SpikeWeightedLoss(nn.Module):
+    def __init__(self, threshold: float = 0.7, weight: float = 3.0):
+        super().__init__()
+        self.threshold = threshold
+        self.weight = weight
+
+    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        weights = 1.0 + self.weight * (target > self.threshold).float()
+        return (weights * (pred - target) ** 2).mean()
+
+
 def create_sequences(data: np.ndarray, seq_len: int) -> tuple[np.ndarray, np.ndarray]:
     x, y = [], []
     for idx in range(len(data) - seq_len):
@@ -109,7 +120,7 @@ def main() -> None:
     print(f"Training samples: {len(x_train)} | Test samples: {len(x_test)}")
 
     model = MultivariateTrafficLSTM(len(FEATURES), args.hidden_size, args.layers, len(FEATURES))
-    criterion = nn.MSELoss()
+    criterion = SpikeWeightedLoss()
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=8, factor=0.5)
     train_losses: list[float] = []
@@ -137,7 +148,16 @@ def main() -> None:
     predictions = scaler.inverse_transform(pred_scaled)
     actuals = scaler.inverse_transform(actual_scaled)
 
-    metrics = {}
+    metrics = {
+        "training": {
+            "loss": "SpikeWeightedLoss",
+            "spike_threshold_scaled": 0.7,
+            "spike_weight": 3.0,
+            "sequence_length": args.sequence_length,
+            "hidden_size": args.hidden_size,
+            "epochs": args.epochs,
+        }
+    }
     print("\nTest performance:")
     print(f"{'feature':<18} {'MAE':>10} {'RMSE':>10}")
     for idx, feature in enumerate(FEATURES):

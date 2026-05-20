@@ -26,7 +26,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--predictions", default="predictions.csv", help="Predictions CSV artifact.")
     parser.add_argument("--actuals", default="actuals.csv", help="Actuals CSV artifact.")
     parser.add_argument("--losses", default="train_losses.csv", help="Training loss CSV artifact.")
-    parser.add_argument("--sensitivity", type=float, default=1.5, help="Std-dev multiplier for spike thresholds.")
+    parser.add_argument("--sensitivity", type=float, default=1.2, help="Std-dev multiplier for spike thresholds.")
     parser.add_argument("--output", default="traffic_prediction_dashboard.png", help="PNG dashboard path.")
     parser.add_argument("--output-dir", default=".", help="Directory containing artifacts and dashboard output.")
     return parser.parse_args()
@@ -140,6 +140,7 @@ def main() -> None:
         ("Rows", f"{len(df):,}"),
         ("Test samples", f"{len(actuals):,}"),
         ("Sensitivity", f"{args.sensitivity:.1f}x std"),
+        ("Loss", "Spike weighted"),
     ]
     for idx, feature in enumerate(FEATURES):
         rows.append((f"{feature} MAE", f"{metrics[feature]['mae']:.3f} {UNITS[idx]}"))
