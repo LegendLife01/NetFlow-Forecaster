@@ -209,9 +209,9 @@ use the baseline/ablation outputs before making claims about improvement.
 The primary checked-in evidence run is the best measured 2000-row synthetic
 benchmark from the V4 self-learning loop. It reached `83.6%` normalized quality,
 beat the persistence baseline on every tracked KPI, and passed the traffic spike
-gate with `0.851` traffic spike F1. Kaggle artifacts are still included as a
-harder external-data reference, but the headline numbers below use the stronger
-synthetic run.
+gate with `0.851` traffic spike F1. The secondary checked-in demo now uses the
+generic `ml/telemetry.csv` path instead of the older Kaggle converted-flow demo,
+because it better represents the repository's local reusable CSV workflow.
 
 Synthetic command:
 
@@ -220,13 +220,10 @@ python ml\generate_data.py --hours 2000 --output runs\v4_synthetic_input\raw_dat
 python ml\auto_benchmark.py --data runs\v4_synthetic_input\raw_data\telemetry.csv --output-dir runs\v4_syn --target-quality 90 --max-attempts 15 --sync-docs --docs-prefix synthetic_
 ```
 
-Kaggle command:
+Generic telemetry command:
 
 ```powershell
-python ml\load_kaggle_data.py --rows 5000 --output runs\spec_kaggle\raw_data\telemetry.csv --augment --seed 42
-python ml\enhanced_train.py --data runs\spec_kaggle\raw_data\telemetry.csv --output-dir runs\spec_kaggle_delta --epochs 60 --sequence-length 48 --spike-weight 6
-python ml\visualize.py --data runs\spec_kaggle\raw_data\telemetry.csv --output-dir runs\spec_kaggle_delta --sensitivity 1.3
-python ml\evaluate_model.py --run-dir runs\spec_kaggle_delta --export-docs --docs-prefix kaggle_
+python ml\self_improve.py --data ml\telemetry.csv --output-dir runs\generic_self_continue --target-quality 90 --max-rounds 1 --attempts-per-round 4 --sync-docs --docs-prefix generic_
 ```
 
 Dashboard examples:
@@ -235,15 +232,15 @@ Dashboard examples:
 
 ![Synthetic model evaluation dashboard](docs/images/synthetic_model_evaluation_dashboard.png)
 
-![Kaggle traffic prediction dashboard](docs/images/kaggle_traffic_prediction_dashboard.png)
+![Generic telemetry traffic prediction dashboard](docs/images/generic_traffic_prediction_dashboard.png)
 
-![Kaggle model evaluation dashboard](docs/images/kaggle_model_evaluation_dashboard.png)
+![Generic telemetry model evaluation dashboard](docs/images/generic_model_evaluation_dashboard.png)
 
 Tracked evidence files:
 
-- `docs/results/kaggle_evaluation_summary.json`
-- `docs/results/kaggle_evaluation_baselines.csv`
-- `docs/results/kaggle_evaluation_spikes.csv`
+- `docs/results/generic_evaluation_summary.json`
+- `docs/results/generic_evaluation_baselines.csv`
+- `docs/results/generic_evaluation_spikes.csv`
 - `docs/results/synthetic_evaluation_summary.json`
 - `docs/results/synthetic_evaluation_baselines.csv`
 - `docs/results/synthetic_evaluation_spikes.csv`
@@ -254,6 +251,7 @@ Latest measured synthetic summary:
 | Dataset | Rows | Epochs | Quality | MAE vs Persistence | Beats Persistence Every Feature | Traffic Spike F1 Gate |
 |---|---:|---:|---:|---:|---|---|
 | Synthetic | 2000 | 59 | 83.6% | +25.2% | Yes | Yes |
+| Generic telemetry | 3000 | 52 | 81.2% | +18.4% | Yes | Yes |
 
 Per-feature MAE from the 83.6% synthetic evidence run:
 
@@ -267,9 +265,9 @@ The requested `>=90%` quality target was not reached in these measured runs.
 The 83.6% synthetic run passes the concrete baseline and traffic-spike gates;
 the remaining failed gate is `quality_ge_90`. The best checked-in synthetic
 candidate was `hybrid_low_quantile` after 15 local V4 attempt folders. The
-Kaggle converted-flow run remains too close to persistence and still has weak
-traffic spike F1, so it is treated as a limitation rather than the headline
-result.
+generic `ml/telemetry.csv` demo reached `81.2%` normalized quality with `0.810`
+traffic spike F1. It also remains below the requested `>=90%` gate, so it is
+shown as supporting evidence rather than the headline result.
 
 The current sequence ablation smoke run from `ml/compare_sequence_models.py`
 used the synthetic 2000-row evidence data for 20 epochs and showed:
