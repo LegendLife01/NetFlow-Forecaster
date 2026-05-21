@@ -2,7 +2,7 @@
 
 This project builds a network telemetry prediction pipeline around synthetic,
 Kaggle, and live ContainerLab data. The current default trainer is a hybrid
-ensemble: a lightweight LSTM learns temporal sequence behavior, while Gradient
+ensemble: a stacked LSTM learns temporal sequence behavior, while Gradient
 Boosting learns engineered lag, rolling-window, and spike features. The two
 models are blended into one forecast for traffic, latency, and packet loss.
 
@@ -34,13 +34,35 @@ That trainer creates:
 - `model/gb_model.joblib`: Gradient Boosting spike/tabular component.
 - `results/predictions.csv`: blended ensemble predictions.
 - `results/actuals.csv`: matching actual values.
+- `results/prediction_intervals.csv`: residual-based 95% forecast bands.
 - `results/train_losses.csv`: LSTM training and validation losses.
 - `json/metrics.json`: training settings and model metrics.
 - `json/scaler_params.json`: input and target scaler metadata.
 
-The ensemble weights default to `65%` Gradient Boosting and `35%` LSTM. This
-leans on Gradient Boosting for spike capture while still using the LSTM for
-time-window behavior.
+The trainer starts from `65%` Gradient Boosting and `35%` LSTM, then tunes the
+blend on a chronological validation slice. This leans on Gradient Boosting for
+spike capture while still using the LSTM for time-window behavior.
+
+The current neural component is a stacked LSTM with temporal attention,
+LayerNorm, and a residual connection from the final hidden state.
+Older run metadata may contain `attention_lstm` or `hybrid_lstm_gradient_boosting`
+from earlier experiments, but new hybrid runs are labeled
+`hybrid_attention_lstm_gradient_boosting`.
+The trainer uses CUDA automatically when PyTorch can see a GPU, and otherwise
+falls back to CPU.
+
+## Current Limitations
+
+- The neural model has temporal attention, but it is not a Transformer or a
+  Temporal Fusion Transformer.
+- This is an experimentation pipeline, not a proven production deployment.
+- Quality depends on the dataset, split, spike frequency, and dashboard
+  sensitivity. Trust the generated evaluation artifacts for each run rather
+  than any fixed README quality claim.
+- Prediction intervals are residual-based approximations, not a full
+  probabilistic forecasting model.
+- The LSTM scalers are fit on the chronological training slice only; validation
+  and test windows are transformed with those fitted scalers.
 
 ## Project Layout
 
@@ -145,6 +167,7 @@ Each complete run contains:
 - `raw_data/telemetry.csv`
 - `results/predictions.csv`
 - `results/actuals.csv`
+- `results/prediction_intervals.csv`
 - `results/train_losses.csv`
 - `results/evaluation_comparison.csv`
 - `results/evaluation_baselines.csv`
@@ -172,15 +195,22 @@ inspection.
 
 The hybrid trainer uses:
 
-- LSTM lookback sequence length: `48`
+- LSTM lookback sequence length: `96`
 - LSTM hidden size: `128`
 - LSTM layers: `2`
+- Batch size: `32`
+- Temporal attention: additive attention over LSTM time steps
+- Stability: residual final-state connection plus `LayerNorm`
 - LSTM epochs: controlled by `-Epochs` or `--epochs`
+- Early stopping: validation loss patience of `12` epochs by default
+- Learning-rate scheduler: `ReduceLROnPlateau`, factor `0.5`, patience `5`
 - Gradient Boosting estimators: `300`
 - Gradient Boosting learning rate: `0.05`
 - Gradient Boosting max depth: `5`
-- Ensemble weights: `0.65` Gradient Boosting, `0.35` LSTM
+- Ensemble weights: validation-tuned from a `0.65` Gradient Boosting, `0.35` LSTM starting point
 - Packet loss transform: `log1p` during neural training, `expm1` after neural prediction
+- GPU support: automatic CUDA use when available, or explicit `--device cpu` / `--device cuda`
+- Uncertainty output: residual-normal 95% intervals in `results/prediction_intervals.csv`
 
 The dashboard spike thresholds are computed as:
 

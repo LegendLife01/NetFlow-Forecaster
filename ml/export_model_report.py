@@ -200,6 +200,8 @@ def main() -> None:
 
     if training.get("architecture") == "attention_lstm":
         model = EnhancedMultivariateTrafficLSTM(input_feature_count, hidden_size, layers, len(FEATURES))
+    elif training.get("architecture") in {"hybrid_lstm_gradient_boosting", "hybrid_attention_lstm_gradient_boosting"}:
+        model = EnhancedMultivariateTrafficLSTM(input_feature_count, hidden_size, layers, len(FEATURES))
     else:
         model = MultivariateTrafficLSTM(input_feature_count, hidden_size, layers, len(FEATURES))
     state = torch.load(model_path, map_location="cpu")
@@ -219,7 +221,7 @@ def main() -> None:
             "model_readable_summary.json",
         ],
         "architecture": {
-            "model_type": "Enhanced Attention LSTM" if training.get("architecture") == "attention_lstm" else "Multivariate LSTM",
+            "model_type": "Enhanced Attention LSTM" if training.get("architecture") in {"attention_lstm", "hybrid_attention_lstm_gradient_boosting"} else ("Hybrid Stacked LSTM + Gradient Boosting" if training.get("architecture") == "hybrid_lstm_gradient_boosting" else "Multivariate LSTM"),
             "input_features": feature_columns,
             "output_features": FEATURES,
             "sequence_length": sequence_length,

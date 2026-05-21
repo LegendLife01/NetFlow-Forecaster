@@ -1,6 +1,6 @@
 """Train a multivariate LSTM for network telemetry prediction."""
 
-# NOTE: Use ml/enhanced_train.py for the superior spiky model with attention + ONNX + hybrid-ready.
+# NOTE: Use ml/enhanced_train.py for the hybrid attention-LSTM + Gradient Boosting model with ONNX export.
 
 from __future__ import annotations
 

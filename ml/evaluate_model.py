@@ -284,6 +284,8 @@ def benchmark_model(run_dir: Path, metrics_json: dict, test_rows: int, repeats: 
     input_feature_count = int(len(training.get("feature_columns", FEATURES)))
     if training.get("architecture") == "attention_lstm":
         model = EnhancedMultivariateTrafficLSTM(input_feature_count, hidden_size, layers, len(FEATURES))
+    elif training.get("architecture") in {"hybrid_lstm_gradient_boosting", "hybrid_attention_lstm_gradient_boosting"}:
+        model = EnhancedMultivariateTrafficLSTM(input_feature_count, hidden_size, layers, len(FEATURES))
     else:
         model = MultivariateTrafficLSTM(input_feature_count, hidden_size, layers, len(FEATURES))
     model.load_state_dict(torch.load(model_path, map_location="cpu"))
