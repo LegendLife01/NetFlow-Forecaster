@@ -8,6 +8,7 @@ param(
     [double]$TargetQuality = 90,
     [int]$MaxAttempts = 12,
     [bool]$AutoBenchmark = $true,
+    [bool]$Learn = $true,
     [switch]$SkipInstall
 )
 
@@ -91,7 +92,8 @@ function Invoke-ModelPipeline($Python, $InputCsv, $OutputDir) {
     if ($AutoBenchmark) {
         Log-Step "Running auto benchmark loop"
         Push-Location $ProjectDir
-        & $Python ml\auto_benchmark.py --data $InputCsv --output-dir $OutputDir --target-quality $TargetQuality --max-attempts $MaxAttempts
+        $learnArg = if ($Learn) { "--learn" } else { "--no-learn" }
+        & $Python ml\auto_benchmark.py --data $InputCsv --output-dir $OutputDir --target-quality $TargetQuality --max-attempts $MaxAttempts $learnArg
         Pop-Location
         if ($LASTEXITCODE -ne 0) {
             throw "Auto benchmark failed."
@@ -313,7 +315,8 @@ switch ($Mode) {
         New-RunFolder $RunDir
         Copy-Item $ExistingData $DataFile -Force
         Push-Location $ProjectDir
-        & $Python ml\auto_benchmark.py --data $DataFile --output-dir $RunDir --target-quality $TargetQuality --max-attempts $MaxAttempts --sync-docs --docs-prefix generic_
+        $learnArg = if ($Learn) { "--learn" } else { "--no-learn" }
+        & $Python ml\auto_benchmark.py --data $DataFile --output-dir $RunDir --target-quality $TargetQuality --max-attempts $MaxAttempts --sync-docs --docs-prefix generic_ $learnArg
         Pop-Location
         if ($LASTEXITCODE -ne 0) {
             throw "Universal benchmark failed."

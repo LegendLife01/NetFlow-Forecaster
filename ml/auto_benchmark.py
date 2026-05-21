@@ -88,7 +88,14 @@ def sync_docs(run_dir: Path, prefix: str) -> None:
                 shutil.copy2(src, docs_results / f"{prefix}{name}")
 
 
-def run_benchmark(data: Path, output_dir: Path, target_quality: float = 90.0, max_attempts: int = 12, max_minutes: int = 45, sync_prefix: str = "") -> BenchmarkResult:
+def run_benchmark(data: Path, output_dir: Path, target_quality: float = 90.0, max_attempts: int = 12, max_minutes: int = 45, sync_prefix: str = "", learn: bool = True) -> BenchmarkResult:
+    if learn:
+        from self_improve import self_improve_benchmark
+
+        attempts_per_round = max(1, min(4, max_attempts))
+        max_rounds = max(1, (max_attempts + attempts_per_round - 1) // attempts_per_round)
+        return self_improve_benchmark(data, output_dir, target_quality, max_rounds, attempts_per_round, sync_prefix)
+
     output_dir.mkdir(parents=True, exist_ok=True)
     profile = profile_telemetry(data)
     (output_dir / "profile.json").write_text(json.dumps(asdict(profile), indent=2), encoding="utf-8")
@@ -138,6 +145,7 @@ def main() -> None:
     parser.add_argument("--max-minutes", type=int, default=45)
     parser.add_argument("--sync-docs", action="store_true")
     parser.add_argument("--docs-prefix", default="generic_")
+    parser.add_argument("--learn", action=argparse.BooleanOptionalAction, default=True)
     args = parser.parse_args()
     result = run_benchmark(
         Path(args.data),
@@ -146,6 +154,7 @@ def main() -> None:
         args.max_attempts,
         args.max_minutes,
         args.docs_prefix if args.sync_docs else "",
+        args.learn,
     )
     print(json.dumps(asdict(result), indent=2))
 

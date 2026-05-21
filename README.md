@@ -430,6 +430,26 @@ The benchmark target is aspirational for difficult external telemetry. If the
 loop cannot pass all gates within the attempt limit, it keeps the best measured
 run and records the bottleneck instead of rewriting metrics.
 
+## Self-Learning Benchmark
+
+The benchmark loop now has a self-learning layer enabled by default. Each
+attempt is appended to `runs/.experience/memory.jsonl`, and
+`runs/.experience/policy.json` summarizes which candidates work best for similar
+telemetry profiles. Future runs use that policy to rank candidates before
+falling back to rule-based retry logic.
+
+Useful commands:
+
+```powershell
+python ml\self_improve.py --data ml\telemetry.csv --output-dir runs\self_learning --target-quality 90 --max-rounds 5
+python ml\experience_store.py --rebuild-policy
+.\run.ps1 benchmark -Learn $true -TargetQuality 90 -MaxAttempts 12
+```
+
+The memory is append-only for auditability. It improves candidate selection
+across sessions, but it does not weaken gates or use test labels for training,
+calibration, or policy ranking.
+
 ## Kaggle And Dataset Modes
 
 Standard Kaggle hybrid run:

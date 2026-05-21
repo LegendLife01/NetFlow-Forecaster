@@ -59,8 +59,11 @@ def calibrate(val_actuals: np.ndarray, val_predictions: np.ndarray, thresholds: 
                         recall = tp / max(tp + fn, 1.0)
                         f1 = 2.0 * precision * recall / max(precision + recall, 1e-9)
                         score = feature_quality(mae, base_mae, 0.0, f1, int(actual_spikes.sum()))
-                        if feature == "traffic_mbps" and int(pred_spikes.sum()) < 5:
-                            score -= 10.0
+                        if feature == "traffic_mbps":
+                            if int(pred_spikes.sum()) < 5:
+                                score -= 10.0
+                            if int(actual_spikes.sum()) > 0 and int(pred_spikes.sum()) > 1.5 * int(actual_spikes.sum()):
+                                score -= 12.0
                         if score > best[0]:
                             best = (score, float(scale), float(bias), float(weight), bool(boost))
         _, scale, bias, weight, boost = best

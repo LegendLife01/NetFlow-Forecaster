@@ -21,4 +21,5 @@ jobs:
       - name: Auto benchmark smoke
         run: |
           python ml/generate_data.py --hours 300 --output /tmp/t.csv --seed 7
-          python ml/auto_benchmark.py --data /tmp/t.csv --output-dir /tmp/auto_benchmark --max-attempts 1 --target-quality 85 --max-minutes 5
+          python ml/auto_benchmark.py --data /tmp/t.csv --output-dir /tmp/auto_benchmark --max-attempts 1 --target-quality 85 --max-minutes 5 --learn
+          test -f runs/.experience/memory.jsonl

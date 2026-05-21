@@ -96,6 +96,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device", choices=["auto", "cpu", "cuda"], default="auto")
     parser.add_argument("--export-onnx", action=argparse.BooleanOptionalAction, default=False, help="Export the LSTM component to ONNX.")
     parser.add_argument("--calibrate", action=argparse.BooleanOptionalAction, default=True, help="Apply validation-only prediction calibration.")
+    parser.add_argument("--predict-traffic-delta", action="store_true", help="Compatibility flag for candidate search; traffic remains level-predicted in this trainer.")
     parser.add_argument("--output", default="lstm_model.pth")
     parser.add_argument("--output-dir", default="runs/hybrid_best")
     return parser.parse_args()
@@ -336,14 +337,15 @@ def main() -> None:
         lstm_weight = np.full(len(FEATURES), args.lstm_weight, dtype=float)
     val_ensemble_pred = gb_weight.reshape(1, -1) * gb_val_pred + lstm_weight.reshape(1, -1) * lstm_val_pred
     persistence_weight = optimize_persistence_blend(val_ensemble_pred, val_actuals)
+    val_persistence = persistence_baseline(val_actuals)
+    val_after_persistence = (
+        persistence_weight.reshape(1, -1) * val_persistence
+        + (1.0 - persistence_weight.reshape(1, -1)) * val_ensemble_pred
+    )
     calibration_params = None
     if args.calibrate:
-        val_persistence = persistence_baseline(val_actuals)
-        val_after_persistence = (
-            persistence_weight.reshape(1, -1) * val_persistence
-            + (1.0 - persistence_weight.reshape(1, -1)) * val_ensemble_pred
-        )
         calibration_params = calibrate(val_actuals, val_after_persistence, raw_spike_thresholds)
+        val_after_persistence = apply_calibration(val_after_persistence, calibration_params, val_persistence)
 
     gb_test_x, gb_test_y = oversample_spikes(
         x_gb[:gb_test_train_end],
@@ -465,6 +467,8 @@ def main() -> None:
     artifact_path(output_dir, "metrics.json", "json").write_text(json.dumps(metrics, indent=2), encoding="utf-8")
     pd.DataFrame(final_pred, columns=FEATURES).to_csv(artifact_path(output_dir, "predictions.csv", "results"), index=False)
     pd.DataFrame(actuals, columns=FEATURES).to_csv(artifact_path(output_dir, "actuals.csv", "results"), index=False)
+    pd.DataFrame(val_after_persistence, columns=FEATURES).to_csv(artifact_path(output_dir, "val_predictions.csv", "results"), index=False)
+    pd.DataFrame(val_actuals, columns=FEATURES).to_csv(artifact_path(output_dir, "val_actuals.csv", "results"), index=False)
     interval_df = pd.DataFrame(
         {
             **{f"{feature}_lower_95": lower_95[:, idx] for idx, feature in enumerate(FEATURES)},
