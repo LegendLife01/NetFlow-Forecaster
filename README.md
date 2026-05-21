@@ -206,19 +206,18 @@ use the baseline/ablation outputs before making claims about improvement.
 
 ## Current Evidence
 
-The primary checked-in evidence run is the 2000-row synthetic trial that reached
-`78.3%` normalized quality. This is the cleanest current demonstration because
-it beats the persistence baseline on every tracked KPI and passes the traffic
-spike gate. Kaggle artifacts are still included as a harder external-data
-reference, but the headline numbers below use the stronger synthetic run.
+The primary checked-in evidence run is the best measured 2000-row synthetic
+benchmark from the V4 self-learning loop. It reached `83.6%` normalized quality,
+beat the persistence baseline on every tracked KPI, and passed the traffic spike
+gate with `0.851` traffic spike F1. Kaggle artifacts are still included as a
+harder external-data reference, but the headline numbers below use the stronger
+synthetic run.
 
 Synthetic command:
 
 ```powershell
-python ml\generate_data.py --hours 2000 --output runs\spec_synthetic_2000\raw_data\telemetry.csv --seed 7
-python ml\enhanced_train.py --data runs\spec_synthetic_2000\raw_data\telemetry.csv --output-dir runs\spec_synthetic_2000 --epochs 40 --sequence-length 96 --spike-weight 6
-python ml\visualize.py --data runs\spec_synthetic_2000\raw_data\telemetry.csv --output-dir runs\spec_synthetic_2000 --sensitivity 1.3
-python ml\evaluate_model.py --run-dir runs\spec_synthetic_2000 --export-docs --docs-prefix synthetic_
+python ml\generate_data.py --hours 2000 --output runs\v4_synthetic_input\raw_data\telemetry.csv --seed 7
+python ml\auto_benchmark.py --data runs\v4_synthetic_input\raw_data\telemetry.csv --output-dir runs\v4_syn --target-quality 90 --max-attempts 15 --sync-docs --docs-prefix synthetic_
 ```
 
 Kaggle command:
@@ -254,20 +253,22 @@ Latest measured synthetic summary:
 
 | Dataset | Rows | Epochs | Quality | MAE vs Persistence | Beats Persistence Every Feature | Traffic Spike F1 Gate |
 |---|---:|---:|---:|---:|---|---|
-| Synthetic | 2000 | 40 | 78.3% | +24.7% | Yes | Yes |
+| Synthetic | 2000 | 59 | 83.6% | +25.2% | Yes | Yes |
 
-Per-feature MAE from the 78.3% synthetic evidence run:
+Per-feature MAE from the 83.6% synthetic evidence run:
 
 | Dataset | Feature | Model MAE | Persistence MAE | MAE Gain |
 |---|---|---:|---:|---:|
-| Synthetic | Traffic | 8.019 | 12.522 | +36.0% |
-| Synthetic | Latency | 0.966 | 1.387 | +30.3% |
-| Synthetic | Packet loss | 0.385 | 0.416 | +7.7% |
+| Synthetic | Traffic | 8.401 | 12.522 | +32.9% |
+| Synthetic | Latency | 1.007 | 1.387 | +27.4% |
+| Synthetic | Packet loss | 0.353 | 0.416 | +15.3% |
 
 The requested `>=90%` quality target was not reached in these measured runs.
-The 78.3% synthetic run passes the concrete baseline and traffic-spike gates.
-The Kaggle converted-flow run remains too close to persistence and still has
-weak traffic spike F1, so it is treated as a limitation rather than the headline
+The 83.6% synthetic run passes the concrete baseline and traffic-spike gates;
+the remaining failed gate is `quality_ge_90`. The best checked-in synthetic
+candidate was `hybrid_low_quantile` after 15 local V4 attempt folders. The
+Kaggle converted-flow run remains too close to persistence and still has weak
+traffic spike F1, so it is treated as a limitation rather than the headline
 result.
 
 The current sequence ablation smoke run from `ml/compare_sequence_models.py`

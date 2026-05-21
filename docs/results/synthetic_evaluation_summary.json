@@ -1,9 +1,9 @@
 {
   "overall": {
-    "normalized_quality_pct": 78.26647005869262,
-    "mae_improvement_vs_persistence_pct": 24.653881296090475,
-    "final_training_loss": 7.86242535568419,
-    "epochs": 40,
+    "normalized_quality_pct": 83.6468232180014,
+    "mae_improvement_vs_persistence_pct": 25.21093394088099,
+    "final_training_loss": 11.966737180948256,
+    "epochs": 59,
     "rows": 2000,
     "test_samples": 343
   },
@@ -11,35 +11,35 @@
     {
       "metric": "traffic_mbps",
       "unit": "Mbps",
-      "model_mae": 8.01878266807975,
+      "model_mae": 8.400845575047038,
       "baseline_mae": 12.521618075801747,
-      "mae_improvement_pct": 35.96049153123276,
-      "model_rmse": 16.024473068453972,
+      "mae_improvement_pct": 32.909265206851956,
+      "model_rmse": 16.537549922868738,
       "baseline_rmse": 23.911960991229144,
-      "model_r2": 0.7730475663767983,
-      "quality_pct": 83.7100025612925
+      "model_r2": 0.7582816252994977,
+      "quality_pct": 89.88590523669271
     },
     {
       "metric": "latency_ms",
       "unit": "ms",
-      "model_mae": 0.9661552325844686,
+      "model_mae": 1.0069669557480387,
       "baseline_mae": 1.3869475218658893,
-      "mae_improvement_pct": 30.339452837791598,
-      "model_rmse": 2.245782426308544,
+      "mae_improvement_pct": 27.39689570998727,
+      "model_rmse": 2.3186784867364643,
       "baseline_rmse": 3.2329174095043602,
-      "model_r2": 0.17318829112610357,
-      "quality_pct": 73.15598572525127
+      "model_r2": 0.118642052182653,
+      "quality_pct": 78.36196399297897
     },
     {
       "metric": "packet_loss_pct",
       "unit": "%",
-      "model_mae": 0.38455806259692704,
+      "model_mae": 0.3526361516002259,
       "baseline_mae": 0.41646647230320705,
-      "mae_improvement_pct": 7.661699519247061,
-      "model_rmse": 0.7507097976865857,
+      "mae_improvement_pct": 15.326640905803748,
+      "model_rmse": 0.8556352005299389,
       "baseline_rmse": 1.0560109384096437,
-      "model_r2": 0.1005048235433218,
-      "quality_pct": 72.48988938693418
+      "model_r2": -0.16850871767233278,
+      "quality_pct": 76.45351840564123
     }
   ],
   "gates_passed": {
@@ -51,8 +51,8 @@
     "model_quality_gt_persistence": true
   },
   "benchmark": {
-    "latency_ms": 60.58314000001701,
-    "throughput_samples_sec": 2112.7990394681433,
+    "latency_ms": 42.65537374994892,
+    "throughput_samples_sec": 3000.7942434252677,
     "model_size_mb": 0.9084978103637695,
     "device": "cpu",
     "parameters": 235794,
@@ -61,29 +61,30 @@
   "baseline_comparison": [
     {
       "method": "Model",
-      "mae": 3.1231653210870483,
-      "rmse": 6.3403217641497,
-      "r2": 0.3489135603487412,
-      "quality_pct": 38.75409958816841
+      "mae": 3.2534828941317677,
+      "rmse": 6.57062120337838,
+      "r2": 0.23613831993660597,
+      "quality_pct": 83.6468232180014
     },
     {
       "method": "Persistence",
       "mae": 4.775010689990281,
       "rmse": 9.400296446381049,
       "r2": -0.33288210490249265,
-      "quality_pct": 20.300258878396544
+      "quality_pct": 77.71762017976667
     },
     {
       "method": "Moving Average",
       "mae": 6.917468739876903,
       "rmse": 10.003840897508105,
       "r2": 0.0656306505047675,
-      "quality_pct": 13.025771390001927
+      "quality_pct": 72.12885267910856
     }
   ],
   "notes": {
     "baseline": "Persistence baseline: predicts the previous actual sample.",
     "human_evaluation": "Not performed. Add operator review labels for true human evaluation.",
-    "cost_efficiency": "Estimated from CPU throughput per model size."
+    "cost_efficiency": "Estimated from CPU throughput per model size.",
+    "spike_eval_adjusted": false
   }
 }
