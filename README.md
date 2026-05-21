@@ -305,8 +305,8 @@ python ml\export_model_report.py --run-dir runs\<run_folder>
 
 ## Community
 
-- See [CONTRIBUTING.md](CONTRIBUTING.md) for development workflow.
-- See [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for community expectations.
-- See [SECURITY.md](SECURITY.md) for vulnerability reporting.
-- See [SUPPORT.md](SUPPORT.md) for help and support channels.
+- See [.github/CONTRIBUTING.md](.github/CONTRIBUTING.md) for development workflow.
+- See [.github/CODE_OF_CONDUCT.md](.github/CODE_OF_CONDUCT.md) for community expectations.
+- See [.github/SECURITY.md](.github/SECURITY.md) for vulnerability reporting.
+- See [.github/SUPPORT.md](.github/SUPPORT.md) for help and support channels.
 - This project is released under the [MIT License](LICENSE).
