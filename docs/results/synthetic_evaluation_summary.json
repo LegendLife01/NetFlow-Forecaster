@@ -1,9 +1,9 @@
 {
   "overall": {
-    "normalized_quality_pct": 83.83813259098446,
-    "mae_improvement_vs_persistence_pct": 25.290798001252075,
-    "final_training_loss": 11.966737180948256,
-    "epochs": 59,
+    "normalized_quality_pct": 89.01929715890675,
+    "mae_improvement_vs_persistence_pct": 3.4878913986761084,
+    "final_training_loss": 1.8189879418129011,
+    "epochs": 77,
     "rows": 2000,
     "test_samples": 343
   },
@@ -11,48 +11,48 @@
     {
       "metric": "traffic_mbps",
       "unit": "Mbps",
-      "model_mae": 8.281335851604043,
-      "baseline_mae": 12.521618075801747,
-      "mae_improvement_pct": 33.86369236410529,
-      "model_rmse": 16.441488725449542,
-      "baseline_rmse": 23.911960991229144,
-      "model_r2": 0.7610815949019156,
-      "quality_pct": 89.97893979774587
+      "model_mae": 9.965283521852049,
+      "baseline_mae": 10.126212827988338,
+      "mae_improvement_pct": 1.5892348785272283,
+      "model_rmse": 15.446535080031085,
+      "baseline_rmse": 16.090060598069936,
+      "model_r2": 0.7877912469162562,
+      "quality_pct": 88.7225469047357
     },
     {
       "metric": "latency_ms",
       "unit": "ms",
-      "model_mae": 1.0166034250448563,
-      "baseline_mae": 1.3869475218658893,
-      "mae_improvement_pct": 26.702098744356334,
-      "model_rmse": 2.322217421112433,
-      "baseline_rmse": 3.2329174095043602,
-      "model_r2": 0.1159496148911795,
-      "quality_pct": 78.81766466279025
+      "model_mae": 1.4659157194059238,
+      "baseline_mae": 1.4357142857142857,
+      "mae_improvement_pct": -2.1035824461837467,
+      "model_rmse": 2.102906911681009,
+      "baseline_rmse": 2.1183437366463735,
+      "model_r2": 0.8079188501884315,
+      "quality_pct": 89.52385736412936
     },
     {
       "metric": "packet_loss_pct",
       "unit": "%",
-      "model_mae": 0.35271960319571305,
-      "baseline_mae": 0.41646647230320705,
-      "mae_improvement_pct": 15.306602895294606,
-      "model_rmse": 0.8554783560344973,
-      "baseline_rmse": 1.0560109384096437,
-      "model_r2": -0.16808036371412927,
-      "quality_pct": 76.57698610565589
+      "model_mae": 0.07248672974233371,
+      "baseline_mae": 0.08142565597667639,
+      "mae_improvement_pct": 10.978021763684843,
+      "model_rmse": 0.09737113802973113,
+      "baseline_rmse": 0.10771262110985734,
+      "model_r2": 0.7623249785477949,
+      "quality_pct": 89.10823746202625
     }
   ],
   "gates_passed": {
     "quality_ge_90": false,
-    "mae_improvement_ge_15": true,
-    "beats_persistence_each_feature_mae": true,
+    "mae_improvement_ge_15": false,
+    "beats_persistence_each_feature_mae": false,
     "traffic_spike_f1_ge_0_50": true,
     "traffic_predicted_spikes_ge_5": true,
     "model_quality_gt_persistence": true
   },
   "benchmark": {
-    "latency_ms": 31.08576250015176,
-    "throughput_samples_sec": 4117.64067229733,
+    "latency_ms": 29.051821249595378,
+    "throughput_samples_sec": 4405.919990361455,
     "model_size_mb": 0.9084978103637695,
     "device": "cpu",
     "parameters": 235794,
@@ -61,28 +61,46 @@
   "baseline_comparison": [
     {
       "method": "Model",
-      "mae": 3.216886293281537,
-      "rmse": 6.539728167532157,
-      "r2": 0.2363169486929886,
-      "quality_pct": 83.83813259098446
+      "mae": 3.8345619903334356,
+      "rmse": 5.882271043247275,
+      "r2": 0.7860116918841609,
+      "quality_pct": 89.01929715890675
     },
     {
       "method": "Persistence",
-      "mae": 4.775010689990281,
-      "rmse": 9.400296446381049,
-      "r2": -0.33288210490249265,
-      "quality_pct": 77.71762017976667
+      "mae": 3.8811175898931,
+      "rmse": 6.1053723186087225,
+      "r2": 0.7613293758418505,
+      "quality_pct": 88.01048388654957
     },
     {
       "method": "Moving Average",
-      "mae": 6.917468739876903,
-      "rmse": 10.003840897508105,
-      "r2": 0.0656306505047675,
-      "quality_pct": 72.12885267910856
+      "mae": 7.30812921930677,
+      "rmse": 9.706162565370912,
+      "r2": 0.5777967618869185,
+      "quality_pct": 79.66372592066489
+    },
+    {
+      "method": "Seasonal Naive",
+      "mae": 7.6729630709426635,
+      "rmse": 11.668826175059046,
+      "r2": -0.36153121880234024,
+      "quality_pct": 67.51325692274527
+    },
+    {
+      "method": "Linear Regression",
+      "mae": 3.8429216805695745,
+      "rmse": 5.718352945480137,
+      "r2": 0.8025257695218544,
+      "quality_pct": 88.65507917354014
     }
   ],
+  "operational_metrics": {
+    "peak_underestimation_rate": 0.2857142857142857,
+    "capacity_false_safe_rate": 0.2857142857142857
+  },
   "notes": {
-    "baseline": "Persistence baseline: predicts the previous actual sample.",
+    "baseline": "Persistence, moving average, seasonal naive, and linear regression baselines are compared.",
     "human_evaluation": "Not performed. Add operator review labels for true human evaluation.",
     "cost_efficiency": "Estimated from CPU throughput per model size.",
     "spike_eval_adjusted": false
