@@ -12,8 +12,11 @@ from pathlib import Path
 from telemetry_profile import TelemetryProfile
 
 
-MEMORY_PATH = Path("runs/.experience/memory.jsonl")
-POLICY_PATH = Path("runs/.experience/policy.json")
+# Resolve paths relative to this source file so they work regardless of
+# which directory the script is invoked from.
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+MEMORY_PATH: Path = _REPO_ROOT / "runs" / ".experience" / "memory.jsonl"
+POLICY_PATH: Path = _REPO_ROOT / "runs" / ".experience" / "policy.json"
 
 
 @dataclass

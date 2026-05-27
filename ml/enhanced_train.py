@@ -54,6 +54,13 @@ class EnhancedMultivariateTrafficLSTM(nn.Module):
         context = self.context_dropout(self.norm(context + out[:, -1]))
         return torch.cat([head(context) for head in self.heads], dim=1)
 
+    def encode(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.input_norm(x)
+        out, _ = self.lstm(x)
+        weights = torch.softmax(self.attention(out), dim=1)
+        context = torch.sum(weights * out, dim=1)
+        return self.norm(context + out[:, -1])
+
 
 class StackedHybridLSTM(nn.Module):
     """Legacy stacked LSTM used by earlier hybrid runs before attention was added."""
@@ -355,79 +362,66 @@ def main() -> None:
     lstm.load_state_dict(best_state)
     lstm.eval()
 
-    print("Training Gradient Boosting spike component...")
+    with torch.no_grad():
+        train_embeddings = lstm.encode(torch.tensor(x_train, dtype=torch.float32, device=device)).cpu().numpy()
+        val_embeddings = lstm.encode(x_val_tensor).cpu().numpy()
+        test_embeddings = lstm.encode(x_test_tensor).cpu().numpy()
+        train_lstm_raw = lstm(torch.tensor(x_train, dtype=torch.float32, device=device)).cpu().numpy()
+        val_lstm_raw = lstm(x_val_tensor).cpu().numpy()
+        test_lstm_raw = lstm(x_test_tensor).cpu().numpy()
+
+    train_lstm_pred = inverse_transform_features(target_scaler.inverse_transform(train_lstm_raw))
+    val_lstm_pred = inverse_transform_features(target_scaler.inverse_transform(val_lstm_raw))
+    test_lstm_pred = inverse_transform_features(target_scaler.inverse_transform(test_lstm_raw))
+
+    print("Training Gradient Boosting spike component with fused LSTM embeddings and stacked predictions...")
     lookback = 24
     df_feat, gb_feature_cols = add_features(df, lookback=lookback)
     x_gb = df_feat[gb_feature_cols].to_numpy(dtype=float)
     y_gb = df_feat[FEATURES].to_numpy(dtype=float)
 
+    gb_train_slice = gb_slice_for_sequences(0, train_end, args.sequence_length, lookback, len(x_gb))
     gb_val_slice = gb_slice_for_sequences(train_end, test_start, args.sequence_length, lookback, len(x_gb))
     gb_test_slice = gb_slice_for_sequences(test_start, len(x_seq), args.sequence_length, lookback, len(x_gb))
-    gb_val_train_end = max(1, gb_val_slice.start)
-    gb_test_train_end = max(1, gb_test_slice.start)
+
+    embedding_cols = [f"lstm_embedding_{idx}" for idx in range(train_embeddings.shape[1])]
+    prediction_cols = [f"lstm_pred_{feature}" for feature in FEATURES]
+    fused_feature_cols = gb_feature_cols + embedding_cols + prediction_cols
+
+    gb_train_x = np.hstack([x_gb[gb_train_slice], train_embeddings, train_lstm_pred])
+    gb_val_x = np.hstack([x_gb[gb_val_slice], val_embeddings, val_lstm_pred])
+    gb_test_x = np.hstack([x_gb[gb_test_slice], test_embeddings, test_lstm_pred])
 
     gb_train_x, gb_train_y = oversample_spikes(
-        x_gb[:gb_val_train_end],
-        y_gb[:gb_val_train_end],
-        spike_thresholds_from_quantile(y_gb[:gb_val_train_end], args.spike_quantile),
-    )
-    gb_for_weight = MultiOutputRegressor(
-        GradientBoostingRegressor(n_estimators=500, learning_rate=0.04, max_depth=4, subsample=0.85, random_state=42)
-    )
-    gb_for_weight.fit(gb_train_x, gb_train_y)
-
-    with torch.no_grad():
-        val_len = gb_val_slice.stop - gb_val_slice.start
-        lstm_val_scaled = lstm(x_val_tensor[:val_len]).detach().cpu().numpy()
-    lstm_val_pred = inverse_transform_features(target_scaler.inverse_transform(lstm_val_scaled))
-    gb_val_pred = gb_for_weight.predict(x_gb[gb_val_slice])
-    val_actuals = y_gb[gb_val_slice]
-    if args.tune_ensemble_weights:
-        gb_weight, lstm_weight = optimize_ensemble_weights(gb_val_pred, lstm_val_pred, val_actuals)
-    else:
-        gb_weight = np.full(len(FEATURES), args.gb_weight, dtype=float)
-        lstm_weight = np.full(len(FEATURES), args.lstm_weight, dtype=float)
-    val_ensemble_pred = gb_weight.reshape(1, -1) * gb_val_pred + lstm_weight.reshape(1, -1) * lstm_val_pred
-    persistence_weight = optimize_persistence_blend(val_ensemble_pred, val_actuals)
-    val_persistence = persistence_baseline(val_actuals)
-    val_after_persistence = (
-        persistence_weight.reshape(1, -1) * val_persistence
-        + (1.0 - persistence_weight.reshape(1, -1)) * val_ensemble_pred
-    )
-    calibration_params = None
-    if args.calibrate:
-        calibration_params = calibrate(val_actuals, val_after_persistence, raw_spike_thresholds)
-        val_after_persistence = apply_calibration(val_after_persistence, calibration_params, val_persistence)
-
-    gb_test_x, gb_test_y = oversample_spikes(
-        x_gb[:gb_test_train_end],
-        y_gb[:gb_test_train_end],
-        spike_thresholds_from_quantile(y_gb[:gb_test_train_end], args.spike_quantile),
+        gb_train_x,
+        y_gb[gb_train_slice],
+        spike_thresholds_from_quantile(y_gb[gb_train_slice], args.spike_quantile),
     )
     gb = MultiOutputRegressor(
         GradientBoostingRegressor(n_estimators=500, learning_rate=0.04, max_depth=4, subsample=0.85, random_state=42)
     )
-    gb.fit(gb_test_x, gb_test_y)
+    gb.fit(gb_train_x, gb_train_y)
 
-    with torch.no_grad():
-        test_len = gb_test_slice.stop - gb_test_slice.start
-        lstm_scaled = lstm(x_test_tensor[:test_len]).detach().cpu().numpy()
-    lstm_pred = inverse_transform_features(target_scaler.inverse_transform(lstm_scaled))
-    gb_pred = gb.predict(x_gb[gb_test_slice])
+    val_actuals = y_gb[gb_val_slice]
+    val_pred = gb.predict(gb_val_x)
+    gb_weights, lstm_weights = optimize_ensemble_weights(val_pred, val_lstm_pred, val_actuals)
+    ensemble_val_pred = gb_weights.reshape(1, -1) * val_pred + lstm_weights.reshape(1, -1) * val_lstm_pred
+    persistence_weights = optimize_persistence_blend(ensemble_val_pred, val_actuals)
+
+    if args.calibrate:
+        calibration_params = calibrate(val_actuals, ensemble_val_pred, raw_spike_thresholds)
+        ensemble_val_pred = apply_calibration(ensemble_val_pred, calibration_params, persistence_baseline(val_actuals))
+    else:
+        calibration_params = None
+
     actuals = y_gb[gb_test_slice]
-    final_pred = gb_weight.reshape(1, -1) * gb_pred + lstm_weight.reshape(1, -1) * lstm_pred
-    traffic_guard = 0.85 * gb_pred[:, 0] + 0.15 * lstm_pred[:, 0]
-    final_pred[:, 0] = np.maximum(final_pred[:, 0], traffic_guard)
-    test_persistence = persistence_baseline(actuals)
-    final_pred = persistence_weight.reshape(1, -1) * test_persistence + (1.0 - persistence_weight.reshape(1, -1)) * final_pred
+    gb_test_pred = gb.predict(gb_test_x)
+    final_pred = gb_weights.reshape(1, -1) * gb_test_pred + lstm_weights.reshape(1, -1) * test_lstm_pred
+    if np.any(persistence_weights > 0.0):
+        persistence = persistence_baseline(actuals)
+        final_pred = persistence_weights.reshape(1, -1) * persistence + (1.0 - persistence_weights.reshape(1, -1)) * final_pred
     if calibration_params is not None:
-        final_pred = apply_calibration(final_pred, calibration_params, test_persistence)
-    final_pred = apply_spike_lift(
-        final_pred,
-        raw_spike_thresholds,
-        parse_optional_feature_values(args.spike_lift_near),
-        parse_optional_feature_values(args.spike_lift_factors),
-    )
+        final_pred = apply_calibration(final_pred, calibration_params, persistence_baseline(actuals))
     final_pred = np.clip(final_pred, 0.0, None)
     residuals = actuals - final_pred
     residual_std = np.std(residuals, axis=0, ddof=0)
@@ -439,15 +433,15 @@ def main() -> None:
     joblib.dump(
         {
             "model": gb,
-            "feature_columns": gb_feature_cols,
+            "feature_columns": fused_feature_cols,
             "features": FEATURES,
             "lookback": lookback,
             "ensemble_weights": {
-                "gradient_boosting": {feature: float(gb_weight[idx]) for idx, feature in enumerate(FEATURES)},
-                "lstm": {feature: float(lstm_weight[idx]) for idx, feature in enumerate(FEATURES)},
-                "persistence_residual": {feature: float(persistence_weight[idx]) for idx, feature in enumerate(FEATURES)},
+                "gradient_boosting": {feature: float(gb_weights[idx]) for idx, feature in enumerate(FEATURES)},
+                "lstm": {feature: float(lstm_weights[idx]) for idx, feature in enumerate(FEATURES)},
+                "persistence_residual": {feature: float(persistence_weights[idx]) for idx, feature in enumerate(FEATURES)},
             },
-            "weight_selection": "validation_grid_search" if args.tune_ensemble_weights else "manual",
+            "weight_selection": "optimized_hybrid_blend",
         },
         artifact_path(output_dir, "gb_model.joblib", "model"),
     )
@@ -472,7 +466,7 @@ def main() -> None:
         "training": {
             "loss": "HybridLstmMSEPlusGradientBoosting",
             "feature_columns": feature_cols,
-            "gb_feature_columns": gb_feature_cols,
+            "gb_feature_columns": fused_feature_cols,
             "output_features": FEATURES,
             "sequence_length": args.sequence_length,
             "hidden_size": args.hidden_size,
@@ -487,7 +481,7 @@ def main() -> None:
             "train_ratio": train_ratio,
             "test_ratio": test_ratio,
             "architecture": "hybrid_attention_lstm_gradient_boosting",
-            "ensemble": "lstm_gradient_boosting",
+            "ensemble": "optimized_hybrid_blend",
             "early_stop_patience": args.early_stop_patience,
             "early_stop_delta": args.early_stop_delta,
             "spike_quantile": args.spike_quantile,
@@ -496,10 +490,7 @@ def main() -> None:
             "spike_thresholds": raw_spike_thresholds,
             "spike_lift_near": args.spike_lift_near,
             "spike_lift_factors": args.spike_lift_factors,
-            "gb_weight": {feature: float(gb_weight[idx]) for idx, feature in enumerate(FEATURES)},
-            "lstm_weight": {feature: float(lstm_weight[idx]) for idx, feature in enumerate(FEATURES)},
-            "persistence_residual_weight": {feature: float(persistence_weight[idx]) for idx, feature in enumerate(FEATURES)},
-            "weight_selection": "validation_grid_search" if args.tune_ensemble_weights else "manual",
+            "weight_selection": "optimized_blend",
             "prediction_interval": "residual_normal_95",
             "onnx_status": onnx_status,
             "calibration": None
@@ -508,7 +499,6 @@ def main() -> None:
                 "scale": calibration_params.scale,
                 "bias": calibration_params.bias,
                 "persistence_weight": calibration_params.persistence_weight,
-                "spike_boost": calibration_params.spike_boost,
             },
         }
     }
@@ -527,7 +517,7 @@ def main() -> None:
     artifact_path(output_dir, "metrics.json", "json").write_text(json.dumps(metrics, indent=2), encoding="utf-8")
     pd.DataFrame(final_pred, columns=FEATURES).to_csv(artifact_path(output_dir, "predictions.csv", "results"), index=False)
     pd.DataFrame(actuals, columns=FEATURES).to_csv(artifact_path(output_dir, "actuals.csv", "results"), index=False)
-    pd.DataFrame(val_after_persistence, columns=FEATURES).to_csv(artifact_path(output_dir, "val_predictions.csv", "results"), index=False)
+    pd.DataFrame(val_pred, columns=FEATURES).to_csv(artifact_path(output_dir, "val_predictions.csv", "results"), index=False)
     pd.DataFrame(val_actuals, columns=FEATURES).to_csv(artifact_path(output_dir, "val_actuals.csv", "results"), index=False)
     interval_df = pd.DataFrame(
         {
@@ -543,14 +533,8 @@ def main() -> None:
         shutil.copy2(data_path, raw_copy)
 
     print(f"\nHYBRID ENSEMBLE COMPLETE -> {output_dir}")
-    print(f"Normalized ensemble MSE: {normalized_mse(final_pred, actuals):.4f}")
-    print("Learned ensemble weights:")
-    for idx, feature in enumerate(FEATURES):
-        print(
-            f"  {feature}: GradientBoosting={gb_weight[idx]:.2f}, "
-            f"LSTM={lstm_weight[idx]:.2f}, PersistenceResidual={persistence_weight[idx]:.2f}"
-        )
-    print("This should give stronger spike capture than the pure LSTM.")
+    print(f"Normalized final MSE: {normalized_mse(final_pred, actuals):.4f}")
+    print("Trained fused GB model using LSTM sequence embeddings.")
 
 
 if __name__ == "__main__":

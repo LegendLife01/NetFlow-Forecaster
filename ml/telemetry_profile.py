@@ -70,13 +70,19 @@ def profile_telemetry(path: Path, train_ratio: float = 0.70, test_ratio: float =
         trainer = "hybrid_aggressive"
     else:
         trainer = "hybrid"
-    source = " ".join(str(value) for value in df.get("source", []))[:500].lower() if "source" in df.columns else ""
-    traffic_min = float(np.min(values[:, 0]))
-    traffic_span = float(np.max(values[:, 0]) - traffic_min)
-    kaggle_like = "kaggle" in path.name.lower() or "kaggle" in source or (8.0 <= traffic_min <= 12.5 and 100.0 <= traffic_span <= 260.0)
-    if kaggle_like:
+    # ── Data quality check: feature correlation ────────────────────────────
+    # If any two target features have Pearson |r| > 0.95 the columns are
+    # near-identical. This often happens with Kaggle-style or synthetic data
+    # where latency/loss are derived directly from traffic. In that case, a
+    # heavy sequence model can overfit the coupling, so prefer a simpler
+    # tree model over failing the run.
+    feature_values = df[FEATURES].to_numpy(dtype=float)
+    corr_matrix = np.corrcoef(feature_values.T)
+    max_off_diag_corr = float(np.max(np.abs(corr_matrix - np.eye(len(FEATURES)))))
+    if usable_rows >= 400 and max_off_diag_corr > 0.95:
         trainer = "gb_only"
-        spike_quantile = 0.88
+
+    source = " ".join(str(value) for value in df.get("source", []))[:500].lower() if "source" in df.columns else ""
     epochs = 40 if usable_rows < 1000 else 60
     return TelemetryProfile(
         rows=int(len(df)),

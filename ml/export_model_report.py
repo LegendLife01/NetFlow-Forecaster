@@ -119,7 +119,7 @@ def write_markdown(run_dir: Path, report: dict[str, object], tensor_rows: list[d
         "- The LSTM reads a history window of network telemetry and predicts the next traffic, latency, and packet-loss values.",
         "- The recurrent memory lets it learn patterns over time instead of treating each row independently.",
         "- The spike-weighted loss makes high-load samples more important during training.",
-        "- Packet loss is trained on a log1p scale and converted back with expm1 so small loss values are easier to learn.",
+        "- Packet loss is trained with a square-root transform and restored by squaring so loss spikes remain stable and numerically tractable.",
         "",
         "## Feature Relevance",
         "",
@@ -198,9 +198,7 @@ def main() -> None:
     feature_columns = list(training.get("feature_columns", FEATURES))
     input_feature_count = len(feature_columns)
 
-    if training.get("architecture") == "attention_lstm":
-        model = EnhancedMultivariateTrafficLSTM(input_feature_count, hidden_size, layers, len(FEATURES))
-    elif training.get("architecture") == "hybrid_attention_lstm_gradient_boosting":
+    if training.get("architecture") in {"attention_lstm", "hybrid_attention_lstm_gradient_boosting", "feature_fusion_lstm_gradient_boosting"}:
         model = EnhancedMultivariateTrafficLSTM(input_feature_count, hidden_size, layers, len(FEATURES))
     elif training.get("architecture") == "hybrid_lstm_gradient_boosting":
         model = StackedHybridLSTM(input_feature_count, hidden_size, layers, len(FEATURES))
@@ -223,7 +221,7 @@ def main() -> None:
             "model_readable_summary.json",
         ],
         "architecture": {
-            "model_type": "Enhanced Attention LSTM" if training.get("architecture") in {"attention_lstm", "hybrid_attention_lstm_gradient_boosting"} else ("Hybrid Stacked LSTM + Gradient Boosting" if training.get("architecture") == "hybrid_lstm_gradient_boosting" else "Multivariate LSTM"),
+            "model_type": "Enhanced Attention LSTM" if training.get("architecture") in {"attention_lstm", "hybrid_attention_lstm_gradient_boosting", "feature_fusion_lstm_gradient_boosting"} else ("Hybrid Stacked LSTM + Gradient Boosting" if training.get("architecture") == "hybrid_lstm_gradient_boosting" else "Multivariate LSTM"),
             "input_features": feature_columns,
             "output_features": FEATURES,
             "sequence_length": sequence_length,

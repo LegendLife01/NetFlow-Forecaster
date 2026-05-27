@@ -17,6 +17,7 @@ import joblib
 import numpy as np
 import pandas as pd
 import torch
+from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 from enhanced_train import EnhancedMultivariateTrafficLSTM, StackedHybridLSTM
@@ -69,6 +70,51 @@ def moving_average_baseline(actuals: np.ndarray, window: int = 5) -> np.ndarray:
         history = actuals[start:idx]
         baseline[idx] = history.mean(axis=0) if len(history) else actuals[idx]
     return baseline
+
+
+def seasonal_naive_baseline(actuals: np.ndarray, period: int = 24) -> np.ndarray:
+    baseline = np.empty_like(actuals)
+    for idx in range(len(actuals)):
+        if idx >= period:
+            baseline[idx] = actuals[idx - period]
+        elif idx > 0:
+            baseline[idx] = actuals[idx - 1]
+        else:
+            baseline[idx] = actuals[idx]
+    return baseline
+
+
+def linear_regression_baseline(actuals: np.ndarray, lags: int = 3) -> np.ndarray:
+    if len(actuals) <= lags:
+        return persistence_baseline(actuals)
+    X = []
+    y = []
+    for idx in range(lags, len(actuals)):
+        X.append(actuals[idx - lags : idx].reshape(-1))
+        y.append(actuals[idx])
+    X = np.asarray(X, dtype=float)
+    y = np.asarray(y, dtype=float)
+    model = LinearRegression()
+    model.fit(X, y)
+    baseline = np.empty_like(actuals)
+    baseline[:lags] = actuals[:lags]
+    for idx in range(lags, len(actuals)):
+        baseline[idx] = model.predict(actuals[idx - lags : idx].reshape(1, -1))[0]
+    return baseline
+
+
+def peak_underestimation_rate(actuals: np.ndarray, predictions: np.ndarray, threshold: float | None = None) -> float:
+    if threshold is None:
+        threshold = float(np.percentile(actuals[:, 0], 90))
+    actual_peaks = actuals[:, 0] > threshold
+    if not np.any(actual_peaks):
+        return 0.0
+    false_safe = np.logical_and(actuals[:, 0] > threshold, predictions[:, 0] <= threshold)
+    return float(np.sum(false_safe) / np.sum(actual_peaks))
+
+
+def capacity_violation_false_safe_rate(actuals: np.ndarray, predictions: np.ndarray, threshold: float | None = None) -> float:
+    return peak_underestimation_rate(actuals, predictions, threshold)
 
 
 def clamp_quality(value: float) -> float:
@@ -287,9 +333,7 @@ def benchmark_model(run_dir: Path, metrics_json: dict, test_rows: int, repeats: 
     hidden_size = int(training.get("hidden_size", 256))
     layers = int(training.get("layers", 2))
     input_feature_count = int(len(training.get("feature_columns", FEATURES)))
-    if training.get("architecture") == "attention_lstm":
-        model = EnhancedMultivariateTrafficLSTM(input_feature_count, hidden_size, layers, len(FEATURES))
-    elif training.get("architecture") == "hybrid_attention_lstm_gradient_boosting":
+    if training.get("architecture") in {"attention_lstm", "hybrid_attention_lstm_gradient_boosting", "feature_fusion_lstm_gradient_boosting"}:
         model = EnhancedMultivariateTrafficLSTM(input_feature_count, hidden_size, layers, len(FEATURES))
     elif training.get("architecture") == "hybrid_lstm_gradient_boosting":
         model = StackedHybridLSTM(input_feature_count, hidden_size, layers, len(FEATURES))
@@ -376,9 +420,13 @@ def main() -> None:
 
     baseline = persistence_baseline(actuals)
     moving_avg = moving_average_baseline(actuals, window=5)
+    seasonal = seasonal_naive_baseline(actuals, period=24)
+    linear_reg = linear_regression_baseline(actuals, lags=3)
     baselines = {
         "Persistence": baseline,
         "Moving Average": moving_avg,
+        "Seasonal Naive": seasonal,
+        "Linear Regression": linear_reg,
     }
     model_metrics = regression_metrics(actuals, predictions)
     baseline_metrics = regression_metrics(actuals, baseline)
@@ -387,6 +435,8 @@ def main() -> None:
         "Model": spikes,
         "Persistence": spike_analysis(actuals, baseline, telemetry, metrics_json, args.spike_quantile),
         "Moving Average": spike_analysis(actuals, moving_avg, telemetry, metrics_json, args.spike_quantile),
+        "Seasonal Naive": spike_analysis(actuals, seasonal, telemetry, metrics_json, args.spike_quantile),
+        "Linear Regression": spike_analysis(actuals, linear_reg, telemetry, metrics_json, args.spike_quantile),
     }
     comparison = summarize_metrics(model_metrics, baseline_metrics, spikes, len(actuals))
     baseline_comparison = summarize_baselines(actuals, predictions, baselines, baseline_spikes)
@@ -435,6 +485,10 @@ def main() -> None:
         "model_quality_gt_persistence": model_baseline_quality > persistence_quality,
     }
 
+    operational_metrics = {
+        "peak_underestimation_rate": peak_underestimation_rate(actuals, predictions),
+        "capacity_false_safe_rate": capacity_violation_false_safe_rate(actuals, predictions),
+    }
     evaluation = {
         "overall": {
             "normalized_quality_pct": overall_quality,
@@ -448,8 +502,9 @@ def main() -> None:
         "gates_passed": gates,
         "benchmark": benchmark,
         "baseline_comparison": baseline_comparison.to_dict(orient="records"),
+        "operational_metrics": operational_metrics,
         "notes": {
-            "baseline": "Persistence baseline: predicts the previous actual sample.",
+            "baseline": "Persistence, moving average, seasonal naive, and linear regression baselines are compared.",
             "human_evaluation": "Not performed. Add operator review labels for true human evaluation.",
             "cost_efficiency": "Estimated from CPU throughput per model size.",
             "spike_eval_adjusted": spike_eval_adjusted,
@@ -475,9 +530,11 @@ def main() -> None:
     ax_summary = fig.add_subplot(gs[0, 0])
     ax_summary.set_facecolor(panel)
     ax_summary.axis("off")
+    peak_under_rate = peak_underestimation_rate(actuals, predictions)
     summary_rows = [
         ("Quality", f"{overall_quality:.1f}%"),
         ("MAE vs baseline", f"{avg_improvement:.1f}%"),
+        ("Capacity false-safe", f"{peak_under_rate:.1%}"),
         ("Latency", f"{benchmark['latency_ms']:.2f} ms"),
         ("Throughput", f"{benchmark['throughput_samples_sec']:.0f} samples/s"),
         ("Model size", f"{benchmark['model_size_mb']:.2f} MB"),
@@ -591,7 +648,7 @@ def main() -> None:
     detail_text = [
         f"Reproducibility: run folder={run_dir}",
         f"Data source={telemetry.get('source', pd.Series(['unknown'])).iloc[0] if len(telemetry) else 'unknown'}",
-        "Baselines: persistence and 5-sample moving average are saved in results/evaluation_baselines.csv.",
+        "Baselines: persistence, moving average, seasonal naive, and linear regression are saved in results/evaluation_baselines.csv.",
         f"Latency benchmark: CPU batch inference over {args.benchmark_repeats} repeats.",
         "Cost efficiency proxy: throughput per model size; no cloud or GPU cost measured.",
         "Human evaluation: not performed. Add operator labels or incident reviews to evaluate alert usefulness.",

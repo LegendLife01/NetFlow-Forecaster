@@ -60,7 +60,7 @@ def test_packet_loss_transform_round_trip():
         transformed["traffic_mbps"].to_numpy(),
         df["traffic_mbps"].to_numpy(),
     )
-    expected = np.log1p(df["packet_loss_pct"].to_numpy())
+    expected = np.sqrt(df["packet_loss_pct"].to_numpy())
     np.testing.assert_array_almost_equal(
         transformed["packet_loss_pct"].to_numpy(), expected, decimal=5
     )
@@ -76,7 +76,7 @@ def test_packet_loss_transform_round_trip():
 def test_packet_loss_transform_preserves_spike_ordering():
     """packet-loss transform must preserve rank order."""
     vals = np.array([0.0, 0.1, 0.5, 1.0, 3.0, 7.0])
-    transformed = np.log1p(vals)
+    transformed = np.sqrt(vals)
     assert list(np.argsort(vals)) == list(np.argsort(transformed))
 
 

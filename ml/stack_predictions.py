@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import shutil
 import subprocess
 import sys
@@ -40,33 +41,64 @@ def stack_attempts(run_dirs: list[Path], output_dir: Path) -> Path | None:
     pairs = [(run_dir, pair) for run_dir, pair in pairs if pair is not None]
     if len(pairs) < 2:
         return None
-    scored = []
-    for run_dir, (val_pred, val_actual, _, _) in pairs:
-        val_pred, val_actual = align_tail(val_pred, val_actual)
-        scored.append((weighted_mae(val_actual, val_pred), run_dir, val_pred, val_actual))
-    scored.sort(key=lambda item: item[0])
-    _, run_a, pred_a, actual = scored[0]
-    _, run_b, pred_b, actual_b = scored[1]
-    pred_a, actual, pred_b, actual_b = align_tail(pred_a, actual, pred_b, actual_b)
-    best_w = 0.5
-    best_score = float("inf")
-    for weight in np.linspace(0.0, 1.0, 21):
-        score = weighted_mae(actual, weight * pred_a + (1.0 - weight) * pred_b)
-        if score < best_score:
-            best_score = score
-            best_w = float(weight)
+
+    # load_pair returns (val_pred, val_actual, test_pred, test_actual)
+    val_preds = [pair[0] for _, pair in pairs]
+    val_actuals_list = [pair[1] for _, pair in pairs]
+    test_preds = [pair[2] for _, pair in pairs]
+
+    # Different candidates can yield slightly different validation/test lengths
+    # depending on their split logic. Align everything on the most recent tail.
+    val_min = min(*(len(arr) for arr in val_preds), *(len(arr) for arr in val_actuals_list))
+    val_preds = [arr[-val_min:] for arr in val_preds]
+    val_actuals_list = [arr[-val_min:] for arr in val_actuals_list]
+    # Use a shared aligned actuals array for weight search (they should match closely).
+    val_actuals = val_actuals_list[0]
+    test_min = min(len(arr) for arr in test_preds)
+    test_preds = [arr[-test_min:] for arr in test_preds]
+    n_runs = len(pairs)
+    n_features = val_actuals.shape[1]
+    best_weights = np.zeros((n_features, n_runs), dtype=float)
+
+    for feat_idx in range(n_features):
+        best_score = float("inf")
+        best_w = np.zeros(n_runs, dtype=float)
+        for _ in range(3000):
+            weights = np.random.dirichlet(np.ones(n_runs))
+            candidate = sum(weights[i] * val_preds[i][:, feat_idx] for i in range(n_runs))
+            score = float(np.mean(np.abs(candidate - val_actuals[:, feat_idx])))
+            if score < best_score:
+                best_score = score
+                best_w = weights
+        best_weights[feat_idx] = best_w
+
+    final = np.zeros_like(test_preds[0])
+    for feat_idx in range(n_features):
+        for run_idx in range(n_runs):
+            final[:, feat_idx] += best_weights[feat_idx, run_idx] * test_preds[run_idx][:, feat_idx]
+
+    run_scores = [weighted_mae(val_actuals_list[i], val_preds[i]) for i in range(n_runs)]
+    best_run_idx = int(np.argmin(run_scores))
+    best_run_dir = pairs[best_run_idx][0]
+
     output_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(run_a, output_dir, dirs_exist_ok=True)
-    test_a = pd.read_csv(run_a / "results" / "predictions.csv")[FEATURES].to_numpy(dtype=float)
-    test_b = pd.read_csv(run_b / "results" / "predictions.csv")[FEATURES].to_numpy(dtype=float)
-    actual_a = pd.read_csv(run_a / "results" / "actuals.csv")[FEATURES].to_numpy(dtype=float)
-    test_a, test_b, actual_a = align_tail(test_a, test_b, actual_a)
-    final = best_w * test_a + (1.0 - best_w) * test_b
+    shutil.copytree(best_run_dir, output_dir, dirs_exist_ok=True)
     pd.DataFrame(final, columns=FEATURES).to_csv(output_dir / "results" / "predictions.csv", index=False)
+    actual_a = pd.read_csv(best_run_dir / "results" / "actuals.csv")[FEATURES].to_numpy(dtype=float)
+    if len(actual_a) != len(final):
+        actual_a = actual_a[-len(final) :]
     pd.DataFrame(actual_a, columns=FEATURES).to_csv(output_dir / "results" / "actuals.csv", index=False)
+
+    stacking_meta = {
+        "n_runs_stacked": n_runs,
+        "best_run": str(best_run_dir),
+        "weights": {
+            feature: best_weights[idx].tolist() for idx, feature in enumerate(FEATURES)
+        },
+        "val_scores": {str(pairs[i][0].name): float(run_scores[i]) for i in range(n_runs)},
+    }
     (output_dir / "json" / "stacking.json").write_text(
-        f'{{"run_a":"{run_a}","run_b":"{run_b}","weight_a":{best_w:.3f}}}',
-        encoding="utf-8",
+        json.dumps(stacking_meta, indent=2), encoding="utf-8"
     )
     subprocess.run([sys.executable, str(Path(__file__).with_name("evaluate_model.py")), "--run-dir", str(output_dir)], check=True)
     return output_dir

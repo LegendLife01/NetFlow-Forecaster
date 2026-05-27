@@ -16,5 +16,13 @@ ml/*.png
 ml/metrics.json
 ml/spike_summary.json
 
+# Data files — generate with ml/generate_data.py
+ml/telemetry.csv
+ml/*.csv
+
+# Compiled model artifacts
+ml/*.joblib
+ml/*.onnx
+
 clab-*/
 runs/

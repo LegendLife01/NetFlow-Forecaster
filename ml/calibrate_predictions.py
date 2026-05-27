@@ -18,7 +18,6 @@ class CalibrationParams:
     scale: list[float]
     bias: list[float]
     persistence_weight: list[float]
-    spike_boost: list[bool]
     thresholds: dict[str, float]
 
 
@@ -34,48 +33,46 @@ def calibrate(val_actuals: np.ndarray, val_predictions: np.ndarray, thresholds: 
     scales: list[float] = []
     biases: list[float] = []
     weights: list[float] = []
-    boosts: list[bool] = []
     for idx, feature in enumerate(FEATURES):
         std = max(float(np.std(val_actuals[:, idx], ddof=0)), 1e-9)
         base_mae = float(np.mean(np.abs(val_actuals[:, idx] - persistence[:, idx])))
         actual_spikes = val_actuals[:, idx] > thresholds[feature]
-        best = (-1e9, 1.0, 0.0, 0.0, False)
+        best = (-1e9, 1.0, 0.0, 0.0)
         for scale in np.linspace(0.85, 1.15, 7):
             for bias in np.linspace(-0.1 * std, 0.1 * std, 5):
                 for weight in np.linspace(0.0, 0.5, 6):
                     pred = scale * val_predictions[:, idx] + bias + weight * persistence[:, idx]
                     pred = pred / (1.0 + weight)
-                    for boost in (False, True):
-                        candidate = pred.copy()
-                        if boost and feature == "traffic_mbps":
-                            near = candidate > thresholds[feature] * 0.92
-                            candidate[near] = np.maximum(candidate[near], thresholds[feature] * 1.02)
-                        mae = float(np.mean(np.abs(val_actuals[:, idx] - candidate)))
-                        pred_spikes = candidate > thresholds[feature]
-                        tp = float(np.sum(actual_spikes & pred_spikes))
-                        fp = float(np.sum(~actual_spikes & pred_spikes))
-                        fn = float(np.sum(actual_spikes & ~pred_spikes))
-                        precision = tp / max(tp + fp, 1.0)
-                        recall = tp / max(tp + fn, 1.0)
-                        f1 = 2.0 * precision * recall / max(precision + recall, 1e-9)
-                        score = feature_quality(mae, base_mae, 0.0, f1, int(actual_spikes.sum()))
-                        if feature == "traffic_mbps":
-                            if int(pred_spikes.sum()) < 5:
-                                score -= 10.0
-                            actual_count = int(actual_spikes.sum())
-                            predicted_count = int(pred_spikes.sum())
-                            if actual_count > 0 and predicted_count > 1.3 * actual_count:
-                                score -= 15.0 * (predicted_count / max(actual_count, 1) - 1.3)
-                            if boost and actual_count > 0 and predicted_count > actual_count:
-                                score -= 5.0
-                        if score > best[0]:
-                            best = (score, float(scale), float(bias), float(weight), bool(boost))
-        _, scale, bias, weight, boost = best
+                    mae = float(np.mean(np.abs(val_actuals[:, idx] - pred)))
+                    pred_spikes = pred > thresholds[feature]
+                    tp = float(np.sum(actual_spikes & pred_spikes))
+                    fp = float(np.sum(~actual_spikes & pred_spikes))
+                    fn = float(np.sum(actual_spikes & ~pred_spikes))
+                    precision = tp / max(tp + fp, 1.0)
+                    recall = tp / max(tp + fn, 1.0)
+                    f1 = 2.0 * precision * recall / max(precision + recall, 1e-9)
+                    score = feature_quality(
+                        mae,
+                        base_mae,
+                        0.0,
+                        f1,
+                        int(actual_spikes.sum()),
+                        int(pred_spikes.sum()),
+                    )
+                    if feature == "traffic_mbps":
+                        if int(pred_spikes.sum()) < 5:
+                            score -= 10.0
+                        actual_count = int(actual_spikes.sum())
+                        predicted_count = int(pred_spikes.sum())
+                        if actual_count > 0 and predicted_count > 1.3 * actual_count:
+                            score -= 15.0 * (predicted_count / max(actual_count, 1) - 1.3)
+                    if score > best[0]:
+                        best = (score, float(scale), float(bias), float(weight))
+        _, scale, bias, weight = best
         scales.append(scale)
         biases.append(bias)
         weights.append(weight)
-        boosts.append(boost)
-    return CalibrationParams(scales, biases, weights, boosts, thresholds)
+    return CalibrationParams(scales, biases, weights, thresholds)
 
 
 def apply_calibration(predictions: np.ndarray, params: CalibrationParams, persistence: np.ndarray) -> np.ndarray:
@@ -84,9 +81,6 @@ def apply_calibration(predictions: np.ndarray, params: CalibrationParams, persis
         weight = params.persistence_weight[idx]
         calibrated[:, idx] = params.scale[idx] * calibrated[:, idx] + params.bias[idx] + weight * persistence[:, idx]
         calibrated[:, idx] = calibrated[:, idx] / (1.0 + weight)
-        if params.spike_boost[idx]:
-            near = calibrated[:, idx] > params.thresholds[feature] * 0.92
-            calibrated[near, idx] = np.maximum(calibrated[near, idx], params.thresholds[feature] * 1.02)
     return np.clip(calibrated, 0.0, None)
 
 

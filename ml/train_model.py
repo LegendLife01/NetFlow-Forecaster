@@ -138,11 +138,11 @@ def load_dataset(path: Path) -> pd.DataFrame:
 def transform_features(df: pd.DataFrame) -> pd.DataFrame:
     """Apply per-feature transformations before scaling.
 
-    packet_loss_pct uses log1p so large loss spikes remain learnable while
-    keeping the training target numerically stable.
+    packet_loss_pct uses sqrt instead of log1p. This preserves the relative
+    severity of loss spikes while keeping values numerically stable for scaling.
     """
     transformed = df.copy()
-    transformed["packet_loss_pct"] = np.log1p(transformed["packet_loss_pct"])
+    transformed["packet_loss_pct"] = np.sqrt(transformed["packet_loss_pct"])
     return transformed
 
 
@@ -150,7 +150,7 @@ def inverse_transform_features(values: np.ndarray) -> np.ndarray:
     """Invert transform_features for packet_loss_pct."""
     restored = values.copy()
     loss_idx = FEATURES.index("packet_loss_pct")
-    restored[:, loss_idx] = np.expm1(restored[:, loss_idx])
+    restored[:, loss_idx] = np.square(restored[:, loss_idx])
     restored[:, loss_idx] = np.clip(restored[:, loss_idx], 0.0, None)
     return restored
 
@@ -166,6 +166,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--train-split", type=float, default=0.8, help="Chronological train split.")
     parser.add_argument("--spike-quantile", type=float, default=0.9, help="Training quantile used for spike weighting.")
     parser.add_argument("--spike-weight", type=float, default=4.0, help="Extra loss weight for spike targets.")
+    parser.add_argument("--per-feature-loss-weights", default="1.0,0.7,0.5", help="Comma-separated spike multipliers for traffic, latency, packet loss.")
     parser.add_argument("--focal-gamma", type=float, default=0.0, help="Error focus exponent for hard examples.")
     parser.add_argument("--early-stop-patience", type=int, default=0, help="Stop when validation MSE stops improving. Use 0 to always run all epochs.")
     parser.add_argument("--early-stop-delta", type=float, default=1e-5, help="Minimum validation MSE improvement.")
@@ -226,7 +227,16 @@ def main() -> None:
     raw_thresholds = np.quantile(raw_targets[:split], args.spike_quantile, axis=0)
     scaled_spike_thresholds = target_scaler.transform(raw_thresholds.reshape(1, -1))[0]
     spike_thresholds = torch.tensor(scaled_spike_thresholds, dtype=torch.float32)
-    criterion = SpikeWeightedLoss(spike_thresholds, args.spike_weight, args.focal_gamma)
+    raw_weights = [float(x) for x in args.per_feature_loss_weights.split(",") if x.strip()]
+    if len(raw_weights) != len(FEATURES):
+        raise ValueError(f"--per-feature-loss-weights must have {len(FEATURES)} values")
+    feature_loss_weights = torch.tensor(raw_weights, dtype=torch.float32)
+    criterion = SpikeWeightedLoss(
+        spike_thresholds,
+        args.spike_weight,
+        args.focal_gamma,
+        per_feature_spike_multipliers=feature_loss_weights,
+    )
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=8, factor=0.5)
     train_rows: list[dict[str, float]] = []
@@ -296,8 +306,8 @@ def main() -> None:
             "spike_threshold_scaled": spike_thresholds.tolist(),
             "spike_weight": args.spike_weight,
             "focal_gamma": args.focal_gamma,
-            "packet_loss_transform": "log1p",
-            "packet_loss_inverse_transform": "expm1",
+            "packet_loss_transform": "sqrt",
+            "packet_loss_inverse_transform": "square",
             "sequence_length": args.sequence_length,
             "hidden_size": args.hidden_size,
             "layers": args.layers,

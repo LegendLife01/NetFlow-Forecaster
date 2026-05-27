@@ -23,3 +23,15 @@ jobs:
           python ml/generate_data.py --hours 300 --output /tmp/t.csv --seed 7
           python ml/auto_benchmark.py --data /tmp/t.csv --output-dir /tmp/auto_benchmark --max-attempts 1 --target-quality 85 --max-minutes 5 --learn
           test -f runs/.experience/memory.jsonl
+      - name: Verify predict.py inference smoke
+        run: |
+          BEST_RUN=$(cat /tmp/auto_benchmark/best_run.txt)
+          python ml/predict.py --run-dir "$BEST_RUN" --data /tmp/t.csv --forecast-steps 6 --output /tmp/forecast.csv
+          python - <<'PY'
+          import pandas as pd
+          df = pd.read_csv('/tmp/forecast.csv')
+          assert len(df) == 6, f'Expected 6 rows, got {len(df)}'
+          assert 'traffic_mbps' in df.columns
+          assert 'traffic_mbps_lower_95' in df.columns
+          print('Inference smoke test passed')
+          PY
