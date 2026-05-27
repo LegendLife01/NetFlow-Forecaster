@@ -1,8 +1,8 @@
 {
   "overall": {
-    "normalized_quality_pct": 89.01929715890675,
-    "mae_improvement_vs_persistence_pct": 3.4878913986761084,
-    "final_training_loss": 1.8189879418129011,
+    "normalized_quality_pct": 89.8338553610148,
+    "mae_improvement_vs_persistence_pct": 9.204384701912325,
+    "final_training_loss": 1.5503805886421884,
     "epochs": 77,
     "rows": 2000,
     "test_samples": 343
@@ -11,48 +11,48 @@
     {
       "metric": "traffic_mbps",
       "unit": "Mbps",
-      "model_mae": 9.965283521852049,
+      "model_mae": 8.917650494312879,
       "baseline_mae": 10.126212827988338,
-      "mae_improvement_pct": 1.5892348785272283,
-      "model_rmse": 15.446535080031085,
+      "mae_improvement_pct": 11.934988472048055,
+      "model_rmse": 13.772564882373517,
       "baseline_rmse": 16.090060598069936,
-      "model_r2": 0.7877912469162562,
-      "quality_pct": 88.7225469047357
+      "model_r2": 0.8312938955367095,
+      "quality_pct": 90.40042358307218
     },
     {
       "metric": "latency_ms",
       "unit": "ms",
-      "model_mae": 1.4659157194059238,
+      "model_mae": 1.3722825463624388,
       "baseline_mae": 1.4357142857142857,
-      "mae_improvement_pct": -2.1035824461837467,
-      "model_rmse": 2.102906911681009,
+      "mae_improvement_pct": 4.418131099133613,
+      "model_rmse": 2.0462076929424082,
       "baseline_rmse": 2.1183437366463735,
-      "model_r2": 0.8079188501884315,
-      "quality_pct": 89.52385736412936
+      "model_r2": 0.8181371150493453,
+      "quality_pct": 89.7326825026615
     },
     {
       "metric": "packet_loss_pct",
       "unit": "%",
-      "model_mae": 0.07248672974233371,
+      "model_mae": 0.07225709899371444,
       "baseline_mae": 0.08142565597667639,
-      "mae_improvement_pct": 10.978021763684843,
-      "model_rmse": 0.09737113802973113,
+      "mae_improvement_pct": 11.260034534555304,
+      "model_rmse": 0.09730114776294223,
       "baseline_rmse": 0.10771262110985734,
-      "model_r2": 0.7623249785477949,
-      "quality_pct": 89.10823746202625
+      "model_r2": 0.7626665368351757,
+      "quality_pct": 88.80189177525331
     }
   ],
   "gates_passed": {
     "quality_ge_90": false,
     "mae_improvement_ge_15": false,
-    "beats_persistence_each_feature_mae": false,
+    "beats_persistence_each_feature_mae": true,
     "traffic_spike_f1_ge_0_50": true,
     "traffic_predicted_spikes_ge_5": true,
     "model_quality_gt_persistence": true
   },
   "benchmark": {
-    "latency_ms": 29.051821249595378,
-    "throughput_samples_sec": 4405.919990361455,
+    "latency_ms": 32.944649999262765,
+    "throughput_samples_sec": 3885.304594307858,
     "model_size_mb": 0.9084978103637695,
     "device": "cpu",
     "parameters": 235794,
@@ -61,10 +61,10 @@
   "baseline_comparison": [
     {
       "method": "Model",
-      "mae": 3.8345619903334356,
-      "rmse": 5.882271043247275,
-      "r2": 0.7860116918841609,
-      "quality_pct": 89.01929715890675
+      "mae": 3.454063379889677,
+      "rmse": 5.305357907692956,
+      "r2": 0.8040325158070768,
+      "quality_pct": 89.83385536101478
     },
     {
       "method": "Persistence",
@@ -96,8 +96,8 @@
     }
   ],
   "operational_metrics": {
-    "peak_underestimation_rate": 0.2857142857142857,
-    "capacity_false_safe_rate": 0.2857142857142857
+    "peak_underestimation_rate": 0.4,
+    "capacity_false_safe_rate": 0.4
   },
   "notes": {
     "baseline": "Persistence, moving average, seasonal naive, and linear regression baselines are compared.",
